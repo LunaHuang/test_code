@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>數獨</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --fg: #1f2328;
+    --muted: #6b6f76;
+    --line: #9aa0a6;
+    --line-strong: #1f2328;
+    --cell: #ffffff;
+    --given: #1f2328;
+    --entry: #2457c5;
+    --selected: #d6e4ff;
+    --wrong-bg: #fde2e1;
+    --wrong-fg: #c62828;
+    --done: #2e7d32;
+    --button: #ffffff;
+    --button-border: #c4c7cc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181b;
+      --fg: #e6e7e9;
+      --muted: #9aa0a6;
+      --line: #4a4e55;
+      --line-strong: #c9ccd1;
+      --cell: #212328;
+      --given: #e6e7e9;
+      --entry: #7fa8ff;
+      --selected: #2c3d63;
+      --wrong-bg: #4a2224;
+      --wrong-fg: #ff8a80;
+      --done: #81c784;
+      --button: #2a2d33;
+      --button-border: #4a4e55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    display: flex;
+    justify-content: center;
+  }
+  main { width: 100%; max-width: 480px; }
+  h1 { margin: 0 0 16px; font-size: 1.6rem; }
+  .toolbar, .actions, .pad {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  select, button {
+    font: inherit;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--button-border);
+    background: var(--button);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    width: 100%;
+    aspect-ratio: 1;
+    border: 2px solid var(--line-strong);
+    margin-bottom: 12px;
+    user-select: none;
+  }
+  .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--cell);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-size: clamp(1rem, 5vw, 1.6rem);
+    color: var(--entry);
+    cursor: pointer;
+  }
+  .cell:nth-child(9n) { border-right: none; }
+  .cell:nth-child(9n+3), .cell:nth-child(9n+6) { border-right: 2px solid var(--line-strong); }
+  .cell:nth-child(n+19):nth-child(-n+27),
+  .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--line-strong); }
+  .cell:nth-child(n+73) { border-bottom: none; }
+  .cell.given { color: var(--given); font-weight: 700; }
+  .cell.selected { background: var(--selected); }
+  .cell.wrong { background: var(--wrong-bg); color: var(--wrong-fg); }
+  .pad button { flex: 1 0 calc(20% - 8px); font-size: 1.1rem; }
+  .status { min-height: 1.5em; color: var(--muted); }
+  .status.done { color: var(--done); font-weight: 700; }
+  .status.error { color: var(--wrong-fg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>數獨</h1>
+  <div class="toolbar">
+    <select id="difficulty" aria-label="難度">
+      <option value="easy">簡單</option>
+      <option value="medium" selected>中等</option>
+      <option value="hard">困難</option>
+    </select>
+    <button id="new">新遊戲</button>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="pad" id="pad"></div>
+  <div class="actions">
+    <button id="check">確認答案</button>
+    <button id="solve">顯示答案</button>
+  </div>
+  <div class="status" id="status"></div>
+</main>
+<script>
+  const boardEl = document.getElementById('board');
+  const padEl = document.getElementById('pad');
+  const statusEl = document.getElementById('status');
+  const checkBtn = document.getElementById('check');
+  const solveBtn = document.getElementById('solve');
+
+  let puzzle = [];   // 題目，0 代表空格
+  let entries = [];  // 作答，0 代表未作答
+  let wrong = new Set(); // 錯格，以 r*9+c 表示
+  let selected = null;
+  let locked = false;
+  let round = 0; // 局的編號，用來丟棄上一局還沒回來的回應
+
+  const cells = [];
+  for (let i = 0; i < 81; i++) {
+    const el = document.createElement('div');
+    el.className = 'cell';
+    el.addEventListener('click', () => select(i));
+    boardEl.appendChild(el);
+    cells.push(el);
+  }
+  for (let d = 1; d <= 9; d++) {
+    padEl.appendChild(padButton(String(d), () => enter(d)));
+  }
+  padEl.appendChild(padButton('清除', () => enter(0)));
+
+  function padButton(label, onClick) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function render() {
+    cells.forEach((el, i) => {
+      const r = Math.floor(i / 9), c = i % 9;
+      const given = puzzle[r][c];
+      const value = given || entries[r][c];
+      el.textContent = value || '';
+      el.classList.toggle('given', given !== 0);
+      el.classList.toggle('wrong', wrong.has(i));
+      el.classList.toggle('selected', i === selected);
+    });
+    checkBtn.disabled = locked;
+    solveBtn.disabled = locked;
+    padEl.querySelectorAll('button').forEach(b => b.disabled = locked);
+  }
+
+  function setStatus(text, kind = '') {
+    statusEl.textContent = text;
+    statusEl.className = 'status ' + kind;
+  }
+
+  function select(i) {
+    if (locked) return;
+    selected = i;
+    render();
+  }
+
+  function enter(d) {
+    if (locked || selected === null) return;
+    const r = Math.floor(selected / 9), c = selected % 9;
+    if (puzzle[r][c] !== 0 || entries[r][c] === d) return;
+    entries[r][c] = d;
+    wrong.delete(selected);
+    render();
+  }
+
+  async function api(path, body) {
+    const res = await fetch(path, body === undefined ? {} : {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+  }
+
+  async function newGame() {
+    const current = ++round;
+    setStatus('產生題目中…');
+    try {
+      const d = document.getElementById('difficulty').value;
+      const data = await api('/api/new?difficulty=' + d);
+      if (current !== round) return;
+      puzzle = data.puzzle;
+      entries = puzzle.map(row => row.map(() => 0));
+      wrong = new Set();
+      selected = null;
+      locked = false;
+      setStatus('');
+      render();
+    } catch (e) {
+      setStatus('無法產生題目：' + e.message, 'error');
+    }
+  }
+
+  async function check() {
+    const current = round;
+    try {
+      const res = await api('/api/check', { puzzle, entries });
+      if (current !== round) return;
+      wrong = new Set(res.wrong.map(w => w.row * 9 + w.col));
+      if (res.complete) {
+        locked = true;
+        selected = null;
+        setStatus('恭喜完成！', 'done');
+      } else {
+        setStatus('');
+      }
+      render();
+    } catch (e) {
+      setStatus('確認失敗：' + e.message, 'error');
+    }
+  }
+
+  async function solve() {
+    const current = round;
+    try {
+      const res = await api('/api/solve', { puzzle });
+      if (current !== round) return;
+      entries = res.solution.map((row, r) => row.map((v, c) => puzzle[r][c] ? 0 : v));
+      wrong = new Set();
+      locked = true;
+      selected = null;
+      setStatus('已顯示答案，按「新遊戲」再玩一局');
+      render();
+    } catch (e) {
+      setStatus('無法顯示答案：' + e.message, 'error');
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (locked || selected === null || e.target.tagName === 'SELECT') return;
+    const moves = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    if (e.key >= '1' && e.key <= '9') {
+      enter(Number(e.key));
+    } else if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') {
+      enter(0);
+    } else if (e.key in moves) {
+      e.preventDefault();
+      const [dr, dc] = moves[e.key];
+      const nr = Math.floor(selected / 9) + dr, nc = selected % 9 + dc;
+      if (nr >= 0 && nr < 9 && nc >= 0 && nc < 9) select(nr * 9 + nc);
+    }
+  });
+  document.getElementById('new').addEventListener('click', newGame);
+  checkBtn.addEventListener('click', check);
+  solveBtn.addEventListener('click', solve);
+
+  newGame();
+</script>
+</body>
+</html>
