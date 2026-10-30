@@ -114,3 +114,70 @@ func TestCorruptDataFileIsReportedInChinese(t *testing.T) {
 		t.Fatalf("錯誤 = %v，想要包含「讀取資料檔失敗」", err)
 	}
 }
+
+func TestDoneMarksItemAsDoneInList(t *testing.T) {
+	dir := t.TempDir()
+	mustRun(t, dir, "add", "買牛奶")
+	mustRun(t, dir, "add", "繳電費")
+	mustRun(t, dir, "add", "倒垃圾")
+
+	if got := mustRun(t, dir, "done", "2"); got != "已完成 2  繳電費\n" {
+		t.Errorf("done 輸出 = %q", got)
+	}
+	got := mustRun(t, dir, "list")
+	want := "[ ] 1  買牛奶\n[x] 2  繳電費\n[ ] 3  倒垃圾\n"
+	if got != want {
+		t.Errorf("list 輸出 = %q，想要 %q", got, want)
+	}
+}
+
+func TestDoneAgainOnlyPrintsHintAndLeavesDataFileUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	mustRun(t, dir, "add", "買牛奶")
+	mustRun(t, dir, "done", "1")
+	before := readDataFile(t, dir)
+
+	if got := mustRun(t, dir, "done", "1"); got != "1  買牛奶 已經完成了\n" {
+		t.Errorf("再次 done 輸出 = %q", got)
+	}
+	if after := readDataFile(t, dir); after != before {
+		t.Errorf("再次 done 改動了資料檔：\n前：%s\n後：%s", before, after)
+	}
+}
+
+// readDataFile 讀出資料檔的原始內容，用來確認指令沒有改動它。
+func readDataFile(t *testing.T, dir string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "todos.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestDoneWithBadIdFailsWithoutTouchingDataFile(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string // 錯誤訊息應包含的文字
+	}{
+		{"沒給 id", []string{"done"}, "請提供待辦事項的 id"},
+		{"id 不是數字", []string{"done", "abc"}, "id 必須是數字：abc"},
+		{"id 不存在", []string{"done", "9"}, "找不到 id 為 9 的待辦事項"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			mustRun(t, dir, "add", "買牛奶")
+			before := readDataFile(t, dir)
+
+			_, _, err := runCLI(t, dir, tt.args...)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("錯誤 = %v，想要包含 %q", err, tt.want)
+			}
+			if after := readDataFile(t, dir); after != before {
+				t.Errorf("失敗的 done 改動了資料檔：\n前：%s\n後：%s", before, after)
+			}
+		})
+	}
+}

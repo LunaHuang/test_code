@@ -61,3 +61,13 @@ func (l *list) add(title string, now time.Time) item {
 	l.Items = append(l.Items, it)
 	return it
 }
+
+// indexOf 回傳 id 對應的待辦事項在 Items 裡的位置；找不到時回傳錯誤。
+func (l *list) indexOf(id int) (int, error) {
+	for i, it := range l.Items {
+		if it.ID == id {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("找不到 id 為 %d 的待辦事項", id)
+}
