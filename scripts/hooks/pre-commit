@@ -1,0 +1,18 @@
+#!/bin/sh
+# 對每個已納入版控的 Go module 跑 gofmt、go vet、go test，任一失敗就擋下 commit。
+# 啟用方式（每個 clone 執行一次）：git config core.hooksPath scripts/hooks
+
+status=0
+for mod in $(git ls-files '*go.mod'); do
+	dir=$(dirname "$mod")
+	unformatted=$(cd "$dir" && gofmt -l .)
+	if [ -n "$unformatted" ]; then
+		echo "pre-commit：$dir 有檔案未通過 gofmt：$unformatted"
+		status=1
+	fi
+	(cd "$dir" && go vet ./... && go test ./...) || {
+		echo "pre-commit：$dir 的 go vet 或 go test 失敗"
+		status=1
+	}
+done
+exit $status
