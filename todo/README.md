@@ -1,0 +1,27 @@
+# 待辦清單
+
+命令列待辦清單：新增待辦事項、列出整份清單。
+
+## 執行
+
+在 `todo/` 目錄裡執行，資料檔會寫在目前目錄的 `data/todos.json`，第一次新增時自動建立：
+
+```sh
+cd todo
+go run . add 買牛奶
+go run . list
+```
+
+## 指令
+
+- `add <標題>`：新增待辦事項，印出它的 id。標題可以有多個字，不用加引號。
+- `list`：照 id 列出所有待辦事項；清單是空的時候印「沒有待辦事項」。
+
+指令錯誤（沒給指令、指令不認得、沒給標題）時，錯誤訊息印到 stderr，exit code 為 1。
+
+## 結構
+
+- [`store.go`](store.go)：待辦清單的資料結構與資料檔讀寫。
+- [`todo.go`](todo.go)：`run` 解析指令並輸出結果，是測試的唯一進入點；測試在 `todo_test.go`。
+- [`main.go`](main.go)：把命令列參數交給 `run`。
+- 詞彙：[`GLOSSARY.md`](GLOSSARY.md)。
