@@ -12,7 +12,8 @@ import (
 const usage = `用法：
   todo add <標題>   新增待辦事項
   todo list         列出所有待辦事項
-  todo done <id>    把待辦事項標成完成`
+  todo done <id>    把待辦事項標成完成
+  todo delete <id>  刪除待辦事項`
 
 // run 執行一次 todo 指令，待辦清單存放在 dataDir。
 // 回傳的錯誤只說明原因；沒給指令或指令不認得時，另外把用法寫到 stderr。
@@ -66,6 +67,19 @@ func run(args []string, dataDir string, stdout, stderr io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(stdout, "已完成 %d  %s\n", it.ID, it.Title)
+	case "delete":
+		id, err := parseID(args[1:])
+		if err != nil {
+			return err
+		}
+		it, err := l.remove(id)
+		if err != nil {
+			return err
+		}
+		if err := l.save(dataDir); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "已刪除 %d  %s\n", it.ID, it.Title)
 	default:
 		fmt.Fprintln(stderr, usage)
 		return fmt.Errorf("未知的指令：%s", args[0])

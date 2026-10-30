@@ -71,3 +71,14 @@ func (l *list) indexOf(id int) (int, error) {
 	}
 	return 0, fmt.Errorf("找不到 id 為 %d 的待辦事項", id)
 }
+
+// remove 刪除 id 對應的待辦事項並回傳它；NextID 不變，所以這個 id 不會再被發出。
+func (l *list) remove(id int) (item, error) {
+	i, err := l.indexOf(id)
+	if err != nil {
+		return item{}, err
+	}
+	it := l.Items[i]
+	l.Items = append(l.Items[:i], l.Items[i+1:]...)
+	return it, nil
+}

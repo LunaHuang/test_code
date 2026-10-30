@@ -155,15 +155,18 @@ func readDataFile(t *testing.T, dir string) string {
 	return string(b)
 }
 
-func TestDoneWithBadIdFailsWithoutTouchingDataFile(t *testing.T) {
+func TestBadIdFailsWithoutTouchingDataFile(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
 		want string // 錯誤訊息應包含的文字
 	}{
-		{"沒給 id", []string{"done"}, "請提供待辦事項的 id"},
-		{"id 不是數字", []string{"done", "abc"}, "id 必須是數字：abc"},
-		{"id 不存在", []string{"done", "9"}, "找不到 id 為 9 的待辦事項"},
+		{"done 沒給 id", []string{"done"}, "請提供待辦事項的 id"},
+		{"done id 不是數字", []string{"done", "abc"}, "id 必須是數字：abc"},
+		{"done id 不存在", []string{"done", "9"}, "找不到 id 為 9 的待辦事項"},
+		{"delete 沒給 id", []string{"delete"}, "請提供待辦事項的 id"},
+		{"delete id 不是數字", []string{"delete", "abc"}, "id 必須是數字：abc"},
+		{"delete id 不存在", []string{"delete", "9"}, "找不到 id 為 9 的待辦事項"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -176,8 +179,41 @@ func TestDoneWithBadIdFailsWithoutTouchingDataFile(t *testing.T) {
 				t.Fatalf("錯誤 = %v，想要包含 %q", err, tt.want)
 			}
 			if after := readDataFile(t, dir); after != before {
-				t.Errorf("失敗的 done 改動了資料檔：\n前：%s\n後：%s", before, after)
+				t.Errorf("失敗的指令改動了資料檔：\n前：%s\n後：%s", before, after)
 			}
 		})
+	}
+}
+
+func TestDeleteRemovesItemAndKeepsOtherIds(t *testing.T) {
+	dir := t.TempDir()
+	mustRun(t, dir, "add", "買牛奶")
+	mustRun(t, dir, "add", "繳電費")
+	mustRun(t, dir, "add", "倒垃圾")
+
+	if got := mustRun(t, dir, "delete", "2"); got != "已刪除 2  繳電費\n" {
+		t.Errorf("delete 輸出 = %q", got)
+	}
+	got := mustRun(t, dir, "list")
+	want := "[ ] 1  買牛奶\n[ ] 3  倒垃圾\n"
+	if got != want {
+		t.Errorf("list 輸出 = %q，想要 %q", got, want)
+	}
+}
+
+func TestIdOfDeletedLastItemIsNotReused(t *testing.T) {
+	dir := t.TempDir()
+	mustRun(t, dir, "add", "買牛奶")
+	mustRun(t, dir, "add", "繳電費")
+	mustRun(t, dir, "add", "倒垃圾")
+	mustRun(t, dir, "delete", "3")
+
+	if got := mustRun(t, dir, "add", "洗碗"); got != "已新增 4  洗碗\n" {
+		t.Errorf("刪除後 add 輸出 = %q，想要拿到 id 4", got)
+	}
+	got := mustRun(t, dir, "list")
+	want := "[ ] 1  買牛奶\n[ ] 2  繳電費\n[ ] 4  洗碗\n"
+	if got != want {
+		t.Errorf("list 輸出 = %q，想要 %q", got, want)
 	}
 }
