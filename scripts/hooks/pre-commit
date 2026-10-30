@@ -1,6 +1,7 @@
 #!/bin/sh
 # 對每個已納入版控的 Go module 跑 gofmt、go vet、go test，任一失敗就擋下 commit。
 # 啟用方式（每個 clone 執行一次）：git config core.hooksPath scripts/hooks
+# CI（.github/workflows/check.yml）也直接執行這支腳本，改檢查內容只要改這裡。
 
 status=0
 for mod in $(git ls-files '*go.mod'); do

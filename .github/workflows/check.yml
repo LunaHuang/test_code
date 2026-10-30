@@ -1,0 +1,17 @@
+# 對每個已納入版控的 Go module 跑 gofmt、go vet、go test。
+# 檢查內容與 pre-commit hook 相同，直接執行 hook，只維護一份。
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: sh scripts/hooks/pre-commit
